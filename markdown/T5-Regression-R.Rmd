@@ -1,0 +1,584 @@
+---
+title: "Skript zur Vorlesung 5: Das lineare Regressionsmodell"
+author: "Claudius Gräbner"
+date: "KW 48 2020"
+output:
+  pdf_document: 
+    number_sections: true
+    toc: true
+    includes:
+      in_header: preamble.tex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Einleitung
+
+In diesem Dokument werden alle Abbildungen und Tabellen aus der vierten
+Vorlesung repliziert. 
+Dabei gebe ich der Info wegen *allen* R Code.
+Entsprechend sind bestimmt auch einige Befehle dabei, die Sie jetzt noch nicht
+kennen.
+
+Zudem nehme ich an, dass ausgehend vom Arbeitsverzeichnis das File 
+`data/tidy/journaldaten.csv` existiert, also im Arbeitsverzeichnis ein Ordner
+`data` mit einem Unterordner `tidy` existiert, in dem dann die Datei 
+`journaldaten.csv` liegt.
+Diese Datei kann separat aus dem Moodle heruntergeladen werden.
+
+
+Folgende Pakete wurden verwendet:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+library(ggpubr)
+library(latex2exp)
+library(icaeDesign)
+library(here)
+library(WDI)
+```
+
+Beachten Sie, dass das Paket [icaeDesign](https://github.com/graebnerc/icaeDesign) 
+nicht über die zentrale Paketverwaltung verfübar ist.
+Es muss folgendermaßen installiert werden:
+
+```{r, eval=FALSE}
+devtools::install_github("graebnerc/icaeDesign")
+```
+
+
+
+# Einführungsbeispiel zur Konsumfunktion
+
+
+
+
+
+
+
+Die Daten stammen von der Weltbank und wurden mit folgendem Code heruntergeladen:
+
+```{r, eval=FALSE}
+bip_daten <- WDI(
+  country = "DE", start = 2000, end=2019,
+  indicator = c("NE.CON.TOTL.CN", "NY.GDP.MKTP.CN")) %>%
+  rename(Konsum=NE.CON.TOTL.CN,
+         BIP=NY.GDP.MKTP.CN) %>%
+  dplyr::mutate(Konsum=Konsum/1000000000000,
+                BIP=BIP/1000000000000)
+```
+
+```{r, echo=FALSE}
+pfad_bip_daten <- here("data/T5/bip_einleitung.csv")
+```
+
+```{r, eval=FALSE}
+fwrite(bip_daten, file = pfad_bip_daten)
+```
+
+```{r, echo=FALSE}
+bip_daten <- fread(pfad_bip_daten)
+```
+
+```{r}
+schaetzung_bip <- lm(Konsum~BIP, data = bip_daten)
+schaetzung_bip
+```
+
+```{r}
+beta_0 <- schaetzung_bip[["coefficients"]][1]
+beta_1 <- schaetzung_bip[["coefficients"]][2]
+unname(beta_0 + beta_1*4)
+```
+
+Die Abbildungen wurden folgendermaßen erstellt:
+
+```{r}
+bip_plot <- ggplot(
+  data = bip_daten, mapping = aes(x=BIP, y=Konsum)
+  ) +
+  geom_point() +
+  scale_x_continuous(
+    limits = c(1.95, 3.6),
+    expand = expansion(c(0, 0)),
+    breaks = seq(2.0, 4.0, by = 0.5)) +
+  labs(
+    title = "Konsumausgaben und BIP (2000-2019)",
+    caption = "Daten: Weltbank; Werte in Billionen Euro.") +
+  theme_icae() +
+  theme(
+    axis.title = element_text(size=13),
+    plot.title = element_text(size=14),
+    axis.text = element_text(size=12)
+  )
+
+ggsave(plot = bip_plot, 
+       filename = here("figures/T5/01_C-BIP.pdf"), 
+       width = 5, height = 4)
+```
+
+Hier die Abbildung mit Reggressionsgrade:
+
+```{r, message=FALSE, warning=FALSE}
+bip_plot_reg <- bip_plot + 
+  geom_smooth(method = "lm", color="black", se = FALSE) +
+  annotate(geom = "text", x = 2.6, y = 1.9, 
+           label=TeX("Steigung der Geraden: $\\hat{\\beta}_1=0.665$"), 
+           size=4, hjust=0)
+ggsave(plot = bip_plot_reg, 
+       filename = here("figures/T5/01_C-BIP-reg.pdf"), 
+       width = 5, height = 4)
+```
+
+
+# Illustration der OLS-Schätzung
+
+Datensatz erstellen:
+
+```{r}
+set.seed(123)
+wahres_b0 <- 3
+wahres_b1 <- 1.4
+
+stichproben_n <- 5
+x <- 1:stichproben_n * 0.1
+fehler <- rnorm(stichproben_n, mean = 0, sd = 1)
+y <- rep(NA, stichproben_n)
+
+for (i in 1:stichproben_n){
+  y[i] <- wahres_b0 + wahres_b1*x[i] + fehler[i]
+}
+datensatz <- data.frame(
+  x = x,
+  y = round(y, 2)
+)
+
+datensatz
+```
+
+Schätzung durchführen:
+
+```{r}
+schaetzung <- lm(y~x, data = datensatz)
+schaetzung
+```
+
+```{r}
+schaetzung[["coefficients"]]
+```
+
+# Das Bestimmtheitsmaß $R^2$
+
+$$TSS=\sum_{i=1}^n(Y_i-\bar{Y})^2$$
+
+```{r}
+tss <- sum((datensatz$y - mean(datensatz$y))**2)
+tss
+```
+
+Grafische Darstellung:
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(datensatz, aes(x=x, y=y)) +
+  geom_point() +
+  geom_abline(aes(color="Geschätzte Werte", 
+                  intercept = mean(datensatz$y), 
+                  slope = 0), 
+              alpha=0.75, show.legend = TRUE, color=get_icae_colors("dark blue")) +
+  scale_x_continuous(limits = c(0, 0.55), expand = c(0, 0)) +
+  geom_segment(aes(x = 0.1, y = 3.9,
+                   xend = 0, yend=mean(datensatz$y)),
+               arrow = arrow(length = unit(0.03, "npc")),
+               colour =  get_icae_colors("dark blue")) +
+    geom_segment(aes(
+      x = datensatz$x[1], y = datensatz$y[1],
+      xend = datensatz$x[1], yend=mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark red")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[2], y = datensatz$y[2],
+      xend = datensatz$x[2], yend=mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark red")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[3], y = datensatz$y[3],
+      xend = datensatz$x[3], yend=mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark red")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[4], y = datensatz$y[4],
+      xend = datensatz$x[4], yend=mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark red")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[5], y = datensatz$y[5],
+      xend = datensatz$x[5], yend=mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark red")
+      ) +
+  annotate(geom = "text", 
+           label=TeX("$\\bar{Y} = 3.614$"), 
+           x = datensatz$x[1], y = 4,
+           colour = get_icae_colors("dark blue")) +
+    annotate(geom = "text", 
+           label=TeX("$Y_1-\\bar{Y} = -1$"), 
+           x = datensatz$x[1]-0.05, y = 3,
+           colour = get_icae_colors("dark red")) +
+      annotate(geom = "text", 
+           label=TeX("$Y_2-\\bar{Y} = -0.56$"), 
+           x = datensatz$x[2]-0.038, y = 3.25,
+           colour = get_icae_colors("dark red")) +
+      annotate(geom = "text", 
+           label=TeX("$Y_3-\\bar{Y} = 1.4$"), 
+           x = datensatz$x[3]-0.038, y = 4.45,
+           colour = get_icae_colors("dark red")) +
+      annotate(geom = "text", 
+           label=TeX("$Y_4-\\bar{Y} = 0.02$"), 
+           x = datensatz$x[4]-0.038, y = 3.7,
+           colour = get_icae_colors("dark red")) +
+      annotate(geom = "text", 
+           label=TeX("$Y_5-\\bar{Y} = 0.22$"), 
+           x = datensatz$x[5]-0.038, y = 3.75,
+           colour = get_icae_colors("dark red")) + 
+      annotate(geom = "text", 
+           label=TeX("$TSS = 3.3$"), 
+           x = 0.45, y = 3.0,
+           colour = get_icae_colors("dark red")) +   
+  theme_icae() + 
+  theme(legend.position = "none")
+```
+
+$$RSS=\sum_i^n\epsilon_i^2$$
+```{r}
+rss <- sum(schaetzung[["residuals"]]**2)
+rss
+```
+
+Grafische Darstellung:
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(datensatz, aes(x=x, y=y)) +
+  geom_point() +
+  geom_abline(aes(color="Geschätzte Werte", 
+                  intercept = schaetzung[["coefficients"]][1], 
+                  slope = schaetzung[["coefficients"]][2]), 
+              alpha=0.75, show.legend = TRUE, color=get_icae_colors("dark blue")) +
+  scale_x_continuous(limits = c(0, 0.55), expand = c(0, 0)) +
+    geom_segment(aes(
+      x = datensatz$x[1], y = datensatz$y[1],
+      xend = datensatz$x[1], yend=schaetzung$fitted.values[1]
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[2], y = datensatz$y[2],
+      xend = datensatz$x[2], yend=schaetzung$fitted.values[2]
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[3], y = datensatz$y[3],
+      xend = datensatz$x[3], yend=schaetzung$fitted.values[3]
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[4], y = datensatz$y[4],
+      xend = datensatz$x[4], yend=schaetzung$fitted.values[4]
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[5], y = datensatz$y[5],
+      xend = datensatz$x[5], yend=schaetzung$fitted.values[5]
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    annotate(geom = "text", 
+           label=TeX("$\\epsilon_1$"), 
+           x = datensatz$x[1]-0.007, y = 2.75,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text", 
+           label=TeX("$\\epsilon_2$"), 
+           x = datensatz$x[2]-0.008, y = 3.15,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text", 
+           label=TeX("$\\epsilon_3$"), 
+           x = datensatz$x[3]-0.008, y = 4.45,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text", 
+           label=TeX("$\\epsilon_4$"), 
+           x = datensatz$x[4]-0.008, y = 3.8,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text", 
+           label=TeX("$\\epsilon_5$"), 
+           x = datensatz$x[5]-0.008, y = 3.95,
+           colour = get_icae_colors("dark blue")) + 
+      annotate(geom = "text", 
+           label=TeX("$RSS = 2.35148$"), 
+           x = 0.45, y = 3.0,
+           colour = get_icae_colors("dark blue")) +   
+  theme_icae() + 
+  theme(legend.position = "none")
+```
+
+
+$$ESS=\sum_{i=1}^n(\hat{Y}_i-\bar{Y})^2$$
+
+```{r}
+ess <- sum((schaetzung[["fitted.values"]] - mean(datensatz$y))**2)
+ess
+```
+
+Und grafisch:
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(datensatz, aes(x=x, y=y)) +
+  geom_point() +
+  geom_abline(aes(color="Geschätzte Werte", 
+                  intercept = schaetzung[["coefficients"]][1], 
+                  slope = schaetzung[["coefficients"]][2]), 
+              alpha=0.75, show.legend = TRUE, color=get_icae_colors("dark blue")) +
+    geom_abline(aes(color="Geschätzte Werte", 
+                  intercept = mean(datensatz$y), 
+                  slope = 0), 
+              alpha=0.75, show.legend = TRUE, color=get_icae_colors("dark red")) +
+    geom_segment(aes(x = 0.1, y = 3.9,
+                   xend = 0, yend=mean(datensatz$y)),
+               arrow = arrow(length = unit(0.03, "npc")),
+               colour =  get_icae_colors("dark red")) +
+    annotate(geom = "text", 
+           label=TeX("$\\bar{Y} = 3.614$"), 
+           x = datensatz$x[1], y = 4,
+           colour = get_icae_colors("dark red")) +
+  scale_x_continuous(limits = c(0, 0.55), expand = c(0, 0)) +
+    geom_segment(aes(
+      x = datensatz$x[1], y = schaetzung$fitted.values[1],
+      xend = datensatz$x[1], yend = mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[2], y = schaetzung$fitted.values[2],
+      xend = datensatz$x[2], yend = mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[3], y = schaetzung$fitted.values[3],
+      xend = datensatz$x[3], yend = mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[4], y = schaetzung$fitted.values[4],
+      xend = datensatz$x[4], yend = mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    geom_segment(aes(
+      x = datensatz$x[5], y = schaetzung$fitted.values[5],
+      xend = datensatz$x[5], yend = mean(datensatz$y)
+      ),
+      arrow = arrow(length = unit(0.01, "npc"), ends = "both"),
+      colour =  get_icae_colors("dark blue")
+      ) +
+    annotate(geom = "text",
+           label=TeX("$\\hat{Y}_1-\\bar{Y}$"),
+           x = datensatz$x[1]-0.017, y = 3.25,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text",
+           label=TeX("$\\hat{Y}_2-\\bar{Y}$"),
+           x = datensatz$x[2]-0.018, y = 3.4,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text",
+           label=TeX("$\\hat{Y}_3-\\bar{Y}$"),
+           x = datensatz$x[3]-0.018, y = 3.7,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text",
+           label=TeX("$\\hat{Y}_4-\\bar{Y}$"),
+           x = datensatz$x[4]-0.018, y = 3.75,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text",
+           label=TeX("$\\hat{Y}_5-\\bar{Y}$"),
+           x = datensatz$x[5]-0.018, y = 3.95,
+           colour = get_icae_colors("dark blue")) +
+      annotate(geom = "text",
+           label=TeX("$ESS = 0.94864$"),
+           x = 0.45, y = 3.0,
+           colour = get_icae_colors("dark blue")) +
+  theme_icae() + 
+  theme(legend.position = "none")
+```
+
+$$TSS=ESS+RSS$$
+
+$$R^2=\frac{ESS}{TSS}=1-\frac{RSS}{TSS}$$
+
+Händische Berechnung:
+
+```{r}
+r_sq_manual <- ess / tss
+r_sq_manual
+```
+
+Auslesen aus dem Regressionsobjekt:
+
+```{r}
+info_schaetzung <- summary(schaetzung)
+info_schaetzung[["r.squared"]]
+```
+
+# Simulation der Schätzerverteilung
+
+Grundstruktur des 'wahren' Modells:
+
+```{r}
+set.seed(123)
+true_DGP <- function(x, b0, b1){
+  y <- b0 + b1*x + rnorm(length(x), 0, 5)
+  return(y)
+}
+beta_0_wahr <- 3
+beta_1_wahr <- 2
+sample_size <- 100
+x <- runif(sample_size, 0, 10)
+```
+
+Simulieren von 1000 Datensätzen und Schätzung von 1000 Regressionen:
+
+```{r}
+set.seed(123)
+n_datensaetze <- 1000
+beta_0_estimates <- rep(NA, n_datensaetze)
+beta_1_estimates <- rep(NA, n_datensaetze)
+
+for (i in 1:n_datensaetze){
+  daten_satz <- data.frame(
+    x = x,
+    y = true_DGP(x, beta_0_wahr, beta_1_wahr)
+  )
+  schaetzung_2 <- lm(y~x, data = daten_satz)
+  beta_0_estimates[i] <- schaetzung_2[["coefficients"]][1]
+  beta_1_estimates[i] <- schaetzung_2[["coefficients"]][2]
+}
+```
+
+Abbildung der Ergebnisse:
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+beta_0_plot <- ggplot(
+  data.frame(x=beta_0_estimates), aes(x=x)
+  ) +
+  geom_histogram(binwidth = 0.25, aes(y=..density..)) +
+  geom_vline(xintercept = beta_0_wahr) +
+  scale_y_continuous(expand = expand_scale(c(0, 0), c(0, 0.1))) +
+  ylab(TeX("Relative Häufigkeit von $\\hat{\\beta_0}}$")) +
+  xlab(TeX("$\\hat{\\beta_0}}$")) +
+  ggtitle(TeX("Streuung von $\\hat{\\beta_0}}$")) + 
+  annotate(geom = "text", label=TeX("$\\beta_0$"), x = beta_0_wahr-0.25, y=0.45) + 
+  theme_icae()
+
+beta_1_plot <- ggplot(
+  data.frame(x=beta_1_estimates), aes(x=x)
+  ) +
+  geom_histogram(binwidth = 0.05, aes(y=..density..)) +
+  geom_vline(xintercept = beta_1_wahr) +
+  scale_y_continuous(expand = expand_scale(c(0, 0), c(0, 0.1))) +
+  ylab(TeX("Relative Häufigkeit von $\\hat{\\beta_1}}$")) +
+  xlab(TeX("$\\hat{\\beta_1}}$")) +
+  ggtitle(TeX("Streuung von $\\hat{\\beta_1}}$")) + 
+  annotate(geom = "text", label=TeX("$\\beta_1$"), 
+           x = beta_1_wahr-0.05, y=2.8) + 
+  theme_icae()
+
+ggarrange(beta_0_plot, beta_1_plot, ncol = 2)
+```
+
+
+# Preise von Journalen und Residuenanalyse
+
+Einlesen der Daten:
+
+```{r}
+journale <- fread(here("data/tidy/journaldaten.csv")) %>% 
+  select(-Titel, - Verlag, - Society, -Bereich, -Buchstaben_pS)
+head(journale)
+```
+
+Schätzung:
+
+```{r}
+schaetzung_j <- lm(Preis~Seitenanzahl, data = journale)
+schaetzung_j
+```
+
+Residuenanalyse mit dem Tukey-Anscombe-Plot:
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(
+  data.frame(
+    GefitteteWerte=schaetzung_j[["fitted.values"]],
+    Residuen=schaetzung_j[["residuals"]]),
+  aes(x=GefitteteWerte, y=Residuen)
+  ) +
+  ggtitle("Tukey-Anscombe-Plot") +
+  geom_hline(yintercept = 0) + 
+  geom_point() +
+  theme_icae()
+```
+
+Residuenanalyse mit dem Q-Q-Plot:
+
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(data.frame(Residuen=schaetzung_j[["residuals"]]),
+       aes(sample=Residuen)) + 
+  stat_qq() + stat_qq_line() +
+  ggtitle("Q-Q-Plot für die Residuen") +
+  theme_icae()
+```
+
+# Vergleich der multiplen und einfachen linearen Regression
+
+Zunächst die Schätzung von
+
+$$PREIS = \beta_0 + \beta_1 SEITEN + \epsilon_i$$
+
+```{r}
+reg_einfach <- lm(Preis~Seitenanzahl, data = journale)
+summary(reg_einfach)
+```
+
+Und die Schätzung von 
+
+```{r}
+reg_einfach <- lm(Preis~Seitenanzahl + Zitationen, data = journale)
+summary(reg_einfach)
+```
+
+
+Man beachte der veränderten Koeffizienten von `Seitenanzahl` im Vergleich zu
+der einfachen Regression.
