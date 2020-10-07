@@ -23,11 +23,13 @@ Dabei gebe ich der Info wegen *allen* R Code.
 Entsprechend sind bestimmt auch einige Befehle dabei, die Sie jetzt noch nicht
 kennen.
 
-Zudem nehme ich an, dass ausgehend vom Arbeitsverzeichnis das File 
+Im Code wird davon ausgegangen, dass ausgehend vom Arbeitsverzeichnis das File 
 `data/tidy/journaldaten.csv` existiert, also im Arbeitsverzeichnis ein Ordner
-`data` mit einem Unterordner `tidy` existiert, in dem dann die Datei 
+`data` mit einem Unterordner `T5` existiert, in dem dann die Datei 
 `journaldaten.csv` liegt.
 Diese Datei kann separat aus dem Moodle heruntergeladen werden.
+Um die Abbildungen zu replizieren müssen Sie den Pfad ggf. an Ihre eigene
+Ordnerstruktur anpassen.
 
 
 Folgende Pakete wurden verwendet:
@@ -40,6 +42,8 @@ library(latex2exp)
 library(icaeDesign)
 library(here)
 library(WDI)
+library(datarium)
+library(plot3D)
 ```
 
 Beachten Sie, dass das Paket [icaeDesign](https://github.com/graebnerc/icaeDesign) 
@@ -51,14 +55,9 @@ devtools::install_github("graebnerc/icaeDesign")
 ```
 
 
-
 # Einführungsbeispiel zur Konsumfunktion
 
-
-
-
-
-
+## Komsum und BIP
 
 Die Daten stammen von der Weltbank und wurden mit folgendem Code heruntergeladen:
 
@@ -133,6 +132,73 @@ ggsave(plot = bip_plot_reg,
        filename = here("figures/T5/01_C-BIP-reg.pdf"), 
        width = 5, height = 4)
 ```
+
+## Marketingeffekte
+
+Hier haben wir den Datensatz `marketing` aus dem Paket `datarium` verwendet.
+Er enthält Informationen über die Ausgaben für drei
+Werbeplattformen (Youtube, Facebook und Zeitungen) und entsprechende
+Umsätze:
+
+```{r}
+library(datarium)
+marketing_data <- datarium::marketing
+head(marketing_data)
+```
+
+Die Daten werden zunächst vorbereitet:
+
+```{r}
+x = marketing_data$facebook
+y = marketing_data$newspaper
+z = marketing_data$sales
+fit <- lm(z ~ x + y)
+grid.lines = 25
+x.pred     = seq(min(x), max(x), length.out = grid.lines)
+y.pred     = seq(min(y), max(y), length.out = grid.lines)
+xy         = expand.grid(x = x.pred, y = y.pred)
+z.pred = matrix(predict(fit, newdata = xy), 
+                nrow = grid.lines, ncol = grid.lines)
+fitpoints = predict(fit)
+
+cols <- viridis::viridis(2)
+```
+
+Da `ggplot2` keine 3d-Darstellungen kann
+wird das `base` Paket verwendet:
+
+```{r}
+scatter3D(x, y, z, 
+          pch = 3, cex = 1, 
+          col = cols[1], alpha=0.5, lighting = TRUE,
+          theta = -40, phi = 0, # viewing angles
+          #ticktype = "detailed",
+          xlab = "Facebookwerbung", ylab = "Zeitungswerbung", zlab = "Verkäufe", 
+          zlim = c(0, 40), clim = c(0, 40),
+          surf = list(x = x.pred, y = y.pred, z = z.pred,  
+                      facets = NA, col=cols[2]))
+```
+
+
+```{r, echo=FALSE}
+pdf(file = here("figures/T5/3d-example.pdf"), 
+    height = 6, 
+    width = 6)
+
+scatter3D(x, y, z, 
+          pch = 3, cex = 1, 
+          col = cols[1], alpha=0.5, lighting = TRUE,
+          theta = -40, phi = 0, # viewing angles
+          #ticktype = "detailed",
+          xlab = "Facebookwerbung", ylab = "Zeitungswerbung", zlab = "Verkäufe", 
+          zlim = c(0, 40), clim = c(0, 40),
+          surf = list(x = x.pred, y = y.pred, z = z.pred,  
+                      facets = NA, col=cols[2]))
+dev.off()
+```
+
+Ich habe bei der resultierenden Abbildung noch manuell den weißen Rand mit der 
+UNIX-Funktion `pdfcrop` entfernt.
 
 
 # Illustration der OLS-Schätzung
@@ -518,12 +584,12 @@ ggarrange(beta_0_plot, beta_1_plot, ncol = 2)
 ```
 
 
-# Preise von Journalen und Residuenanalyse
+# Preise von Journalen
 
 Einlesen der Daten:
 
 ```{r}
-journale <- fread(here("data/tidy/journaldaten.csv")) %>% 
+journale <- fread(here("data/T5/journaldaten.csv")) %>% 
   select(-Titel, - Verlag, - Society, -Bereich, -Buchstaben_pS)
 head(journale)
 ```
@@ -532,33 +598,7 @@ Schätzung:
 
 ```{r}
 schaetzung_j <- lm(Preis~Seitenanzahl, data = journale)
-schaetzung_j
-```
-
-Residuenanalyse mit dem Tukey-Anscombe-Plot:
-
-```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
-ggplot(
-  data.frame(
-    GefitteteWerte=schaetzung_j[["fitted.values"]],
-    Residuen=schaetzung_j[["residuals"]]),
-  aes(x=GefitteteWerte, y=Residuen)
-  ) +
-  ggtitle("Tukey-Anscombe-Plot") +
-  geom_hline(yintercept = 0) + 
-  geom_point() +
-  theme_icae()
-```
-
-Residuenanalyse mit dem Q-Q-Plot:
-
-
-```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
-ggplot(data.frame(Residuen=schaetzung_j[["residuals"]]),
-       aes(sample=Residuen)) + 
-  stat_qq() + stat_qq_line() +
-  ggtitle("Q-Q-Plot für die Residuen") +
-  theme_icae()
+summary(schaetzung_j)
 ```
 
 # Vergleich der multiplen und einfachen linearen Regression
@@ -578,7 +618,6 @@ Und die Schätzung von
 reg_einfach <- lm(Preis~Seitenanzahl + Zitationen, data = journale)
 summary(reg_einfach)
 ```
-
 
 Man beachte der veränderten Koeffizienten von `Seitenanzahl` im Vergleich zu
 der einfachen Regression.

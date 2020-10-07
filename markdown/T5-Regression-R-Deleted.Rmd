@@ -1,0 +1,34 @@
+---
+title: "T5 Gelöschter Code"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Residuenanalyse mit dem Tukey-Anscombe-Plot:
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(
+  data.frame(
+    GefitteteWerte=schaetzung_j[["fitted.values"]],
+    Residuen=schaetzung_j[["residuals"]]),
+  aes(x=GefitteteWerte, y=Residuen)
+  ) +
+  ggtitle("Tukey-Anscombe-Plot") +
+  geom_hline(yintercept = 0) + 
+  geom_point() +
+  theme_icae()
+```
+
+Residuenanalyse mit dem Q-Q-Plot:
+
+
+```{r, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+ggplot(data.frame(Residuen=schaetzung_j[["residuals"]]),
+       aes(sample=Residuen)) + 
+  stat_qq() + stat_qq_line() +
+  ggtitle("Q-Q-Plot für die Residuen") +
+  theme_icae()
+```
