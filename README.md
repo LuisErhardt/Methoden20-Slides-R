@@ -3,4 +3,4 @@
 Hier wird der R-Code für die Abbildungen und empirischen Beispiele der Slides 
 im WS 2020/21 bereit gestellt.
 Die Repository wird dabei laufend geupdated.
-Der relevante Code inklusive Erläuterung befindet sich im Ornder `markdown`.
+Der relevante Code inklusive Erläuterung befindet sich im Ordner `markdown`.
