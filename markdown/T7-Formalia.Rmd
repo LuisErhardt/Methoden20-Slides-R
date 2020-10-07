@@ -1,0 +1,560 @@
+---
+title: "Replikations-Skript zur Vorlesung 8: Formalia"
+author: "Claudius Gräbner"
+date: "KW 50 2020"
+output:
+  pdf_document: 
+    number_sections: true
+    toc: true
+    includes:
+      in_header: preamble.tex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(out.height = "6cm")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+In diesem Dokument werden alle Abbildungen und Tabellen aus der siebten
+Vorlesung repliziert. 
+Dabei gebe ich der Info wegen *allen* R Code.
+Entsprechend sind bestimmt auch einige Befehle dabei, die Sie jetzt noch nicht
+kennen.
+
+Zudem nehme ich an, dass im Arbeitsverzeichnis der Ordner `data/T7/` existiert
+und in diesem folgende Datensätze enthalten sind (diese sind über die Repository
+zur Vorlesung verfügbar):
+`bip_growth.csv` und `AutoDaten.csv`.
+
+Folgende Pakete werden zudem in diesem Skript verwendet:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+library(ggpubr)
+library(latex2exp)
+library(icaeDesign)
+library(here)
+library(matlib)
+library(fitdistrplus)
+```
+
+Beachten Sie, dass das Paket [icaeDesign](https://github.com/graebnerc/icaeDesign) 
+nicht über die zentrale Paketverwaltung verfübar ist.
+Es muss folgendermaßen installiert werden:
+
+```{r, eval=FALSE}
+devtools::install_github("graebnerc/icaeDesign")
+```
+
+# Wachstumsraten
+
+```{r}
+beispiel_daten <- fread(
+  here("data/T7/bip_growth.csv")
+  ) %>%
+  arrange(-year) 
+beispiel_daten
+```
+
+```{r}
+beispiel_daten <- beispiel_daten %>%
+  arrange(country, year) %>%
+  group_by(country) %>%
+  mutate(
+    BIP_Wachstum = (BIP-dplyr::lag(BIP))/abs(dplyr::lag(BIP))*100
+    ) %>%
+  ungroup()
+beispiel_daten
+```
+
+# Differenzialrechnung und Optimierung
+
+```{r}
+f_0 <- function(x) -x^2 + 4
+f_0_d <- function(x) -2*x
+
+data <- data.frame(x=seq(-2, 2, 0.05)) %>%
+  rowwise() %>%
+  mutate(y_2 = f_0(x),
+         y_3 = f_0_d(x))
+
+fun_max <- ggplot(data, aes(x=x, y=y_2)) +
+  geom_line() +
+    labs(
+    title = TeX("$f(x)=x^2 + 4$"),
+    x="x", y="y"
+  ) +
+  geom_segment(x=0, xend=0, y=0, yend=4, linetype=2) +
+  geom_segment(x=-Inf, xend=0, y=4, yend=4, linetype=2) +
+  coord_cartesian(ylim = c(0, 4.2), 
+                  xlim = c(-2.1, 2.1), 
+                  expand = c(0)) +
+  theme_icae() 
+
+fun_deriv <- ggplot(data, aes(x=x, y=y_3)) +
+  geom_line() +
+  labs(
+    title = TeX("$f'(x)=2x$"),
+    x="x", y="y"
+  ) +
+  geom_segment(x=0, xend=0, y=-Inf, yend=0, linetype=2) +
+  geom_segment(x=-Inf, xend=0, y=0, yend=0, linetype=2) +
+  coord_cartesian(ylim = c(-2, 2), 
+                  xlim = c(-1, 1), 
+                  expand = c(0)) +
+  theme_icae() 
+
+comb_plot <- ggarrange(fun_max, fun_deriv, ncol = 2)
+comb_plot
+```
+
+```{r, echo=FALSE}
+ggsave(plot = comb_plot, 
+       filename = here("figures/T7/max_zero.pdf"), 
+       width = 5, height = 3)
+```
+
+## Ableitungen
+
+```{r}
+f_2 <- function(x) 8*x^2 + 2.5*x**3 - 4.25*x**4 + 2
+
+data <- data.frame(x=seq(-2, 2, 0.05)) %>%
+  rowwise() %>%
+  mutate(y_2 = f_2(x))
+
+mult_max <- ggplot(data, aes(x=x, y=y_2)) +
+  geom_line() +
+  ggtitle(TeX("$f(x)=8x^2 + 2.5x^3 - 4.25x^4 + 2$")) +
+  coord_cartesian(ylim = c(0, 10), 
+                  xlim = c(-1.2, 1.7), expand = c(0)) +
+  theme_icae() 
+mult_max
+```
+
+
+```{r}
+f_expr <- expression(8*x^2 + 2.5*x^3 - 4.25*x^4 + 2)
+f_deriv <- D(expr = f_expr, name = "x")
+x <- seq(-2, 2, 0.05)
+f_expr_vals <- eval(f_expr)
+
+f_data <- data.frame(x=x, 
+                     y=f_expr_vals,
+                     y_deriv = eval(f_deriv))
+
+deriv_plot <- ggplot(f_data, aes(x=x, y=y_deriv)) +
+  geom_line() +
+  ggtitle(TeX("$f'(x)=8(2x) + 2.5(3x^2) - 4.25(4x^3)$")) +
+  coord_cartesian(ylim = c(-10, 10), 
+                  xlim = c(-1.2, 1.7), expand = c(0)) +
+  geom_hline(yintercept = 0) +
+  theme_icae() 
+deriv_plot
+```
+
+## Optimierung
+
+```{r}
+f_1 <- function(x) 8*x^2 + 2.5*x**3 - 4.25*x**4 + 2
+```
+
+```{r}
+data <- data.frame(x=seq(-2, 2, 0.05)) %>%
+  rowwise() %>%
+  mutate(y = f_1(x))
+
+ggplot(data, aes(x=x, y=y)) +
+  geom_line() +
+  ggtitle(TeX("$f(x)=8x^2 + 2.5x^3 - 4.25x^4 + 2$")) +
+  coord_cartesian(ylim = c(0, 10), 
+                  xlim = c(-1.2, 1.7), expand = c(0)) +
+  theme_icae() 
+```
+
+```{r}
+opt_obj <- optimize(f = f_1, 
+                    lower = -1.25, upper = 1.75, 
+                    maximum = FALSE)
+opt_obj
+```
+
+```{r}
+opt_obj <- optimize(f = f_1, 
+                    lower = -1.25, upper = 1.75, 
+                    maximum = TRUE)
+opt_obj
+```
+
+```{r}
+opt_obj <- optimize(f = f_1, 
+                    lower = -1.25, upper = 0, 
+                    maximum = TRUE)
+opt_obj
+```
+\newpage
+
+# Lineare Algebra
+
+## Beispiel Keynes
+
+Das Keynesianische Modell:
+
+\begin{align}
+Y&=C+I+G\nonumber\\
+C&=a+bY\nonumber
+\end{align}
+
+Umgeformt:
+
+\begin{align}
+Y-C&=I+G\nonumber\\
+-bY+C&=a\nonumber
+\end{align}
+
+\begin{align}
+\left(\begin{array}{cc} 1 & -1 \\ -b & 1 \end{array}\right) \times 
+\left(\begin{array}{cc} Y \\ C \end{array}\right) &= 
+\left(\begin{array}{cc} I + G  \\ a \end{array}\right)\nonumber\\
+Ax &= d\nonumber
+\end{align}
+
+Lösung in R für $G=5$, $I=4$, $a=4$ und $b=0.5$:
+
+```{r}
+I_keynes <- 5
+G_keynes <- 4
+b_keynes <- 0.5
+a_keynes <- 4
+
+A_keynes <- matrix(c(1, -b_keynes, -1, 1), nrow = 2)
+d_keynes <- matrix(c(I_keynes + G_keynes, a_keynes), ncol = 1)
+Solve(A = A_keynes, b = d_keynes)
+```
+
+## Beispiel OLS
+
+Nehmen wir folgenden Datensatz an:
+
+```{r}
+ols_beispiel <- fread(here("data/T7/AutoDaten.csv"), 
+                      select = c("Auto"="character", 
+                                 "Verbrauch"="double", 
+                                 "PS"="double", "Zylinder"="double")) 
+ols_beispiel
+```
+
+Dies können wir schreiben als:
+
+\begin{align}
+y_1 = \beta_0 + \beta_1 x_{11} + \beta_2 x_{12} + \epsilon_{1} \nonumber\\
+y_1 = \beta_0 + \beta_1 x_{21} + \beta_2 x_{32} + \epsilon_{2} \nonumber\\
+y_1 = \beta_0 + \beta_1 x_{31} + \beta_2 x_{32} + \epsilon_{3} \nonumber\\
+y_1 = \beta_0 + \beta_1 x_{41} + \beta_2 x_{42} + \epsilon_{4} \nonumber\\
+\end{align}
+
+und mit Zahlen:
+
+\begin{align}
+15.8 = \beta_0 + \beta_1 264 + \beta_2 8 + \epsilon_{1} \nonumber\\
+19.7 = \beta_0 + \beta_1 175 + \beta_2 6 + \epsilon_{2} \nonumber\\
+15.0 = \beta_0 + \beta_1 335 + \beta_2 8 + \epsilon_{3} \nonumber\\
+21.4 = \beta_0 + \beta_1 109 + \beta_2 4 + \epsilon_{4} \nonumber\\
+\end{align}
+
+Und als Matrix:
+
+\begin{align}
+\left(\begin{array}{ccc} 1 & 264 & 8 \\ 1 & 175 & 6 \\ 1 & 335 & 8 \\ 1 & 109 & 4 \end{array}\right) \times 
+\left(\begin{array}{cc} \beta_0 \\ \beta_1 \\ \beta_2 \end{array}\right) + 
+\left(\begin{array}{c}\epsilon_{1} \\ \epsilon_{2} \\ \epsilon_{3} \\ \epsilon_{4} \end{array}\right) &= 
+\left(\begin{array}{c} 15.8  \\ 19.7 \\ 15.0 \\ 21.4 \end{array}\right)\nonumber
+\end{align}
+
+Das können wir wiederum in R lösen:
+
+```{r}
+ols_X <- matrix(c(1, 264, 8, 1, 175, 6, 1, 335, 8, 1, 109, 4), 
+                ncol = 3, byrow = T)
+ols_y <- matrix(c(15.8, 19.7, 15.0, 21.4), ncol = 1)
+
+solve(t(ols_X) %*% ols_X) %*% t(ols_X) %*% ols_y
+```
+
+Oder direkt mit `lm()`:
+
+```{r}
+lm(Verbrauch~PS+Zylinder, data = ols_beispiel)
+```
+
+## Herleitung des OLS Schätzers (optional)
+
+Wir wissen bereits, dass die Residuen einer Schätzung gegeben sind durch:
+
+$$e=y-\boldsymbol{X\hat{\beta}}$$
+
+Wir können die Summe der Residuen (RSS) in Matrixschreibweise schreiben als:
+
+$$e'e= 
+\left(\begin{array}{cccc} e_1 & e_2 & ... & e_n \end{array}\right)\left(\begin{array}{cc} e_1 \\ e_2 \\ \vdots \\ e_n \end{array}\right)
+=\left(\begin{array}{cccc} e_1\times e_1 & e_2 \times e_2 & ... & e_n \times e_n \end{array}\right)$$
+
+Wir können dann schreiben:^[Beachte dabei, dass $\boldsymbol{y'X\hat{\beta}}=(\boldsymbol{y'X\hat{\beta}})'=\boldsymbol{\hat{\beta}'X'y}$.]
+
+\begin{align}
+e'e &= \left(\boldsymbol{y}-\boldsymbol{X\hat{\beta}}\right)'\left(\boldsymbol{y}-\boldsymbol{X\hat{\beta}}\right)\nonumber\\
+&=\boldsymbol{y'y}-\boldsymbol{\hat{\beta}'X'y}-\boldsymbol{y'X\hat{\beta}} + \boldsymbol{\hat{\beta}'X'X\hat{\beta}}\nonumber\\
+&=\boldsymbol{y'y}-2\boldsymbol{\hat{\beta}X'y}+\boldsymbol{\hat{\beta}'X'X\hat{\beta}}\nonumber
+\end{align}
+
+Wir wollen diesen Ausdruck nun minimieren.
+Dazu leiten wir nach dem Vektor der zu schätzenden
+Koeffizienten $\boldsymbol{\hat{\beta}}$ ab:
+
+$$\frac{\partial e'e}{\partial\boldsymbol{\hat{\beta}}}=-2\boldsymbol{X'y} + 2\boldsymbol{X'X\hat{\beta}} = 0$$
+
+Diese Gleichung können wir nun umformen zu:
+
+\begin{align}
+2\boldsymbol{X'X\hat{\beta}} &= 2\boldsymbol{X'y}\nonumber\\
+\boldsymbol{X'X\hat{\beta}}&=\boldsymbol{X'y}\nonumber
+\end{align}
+
+Da gilt, dass $\left(\boldsymbol{X'X}\right)^{-1}\left(\boldsymbol{X'X}\right)=I$ 
+multiplizieren wir beide Seiten mit $\left(\boldsymbol{X'X}\right)^{-1}$:
+
+\begin{align}
+\left(\boldsymbol{X'X}\right)^{-1}\boldsymbol{X'X\hat{\beta}} &= \left(\boldsymbol{X'X}\right)^{-1}\boldsymbol{X'y}\nonumber\\
+\boldsymbol{\hat{\beta}} &= \left(\boldsymbol{X'X}\right)^{-1}\left(\boldsymbol{X'y}\right)
+\end{align}
+
+Damit haben wir den Schätzer für $\boldsymbol{\hat{\beta}}$ hergeleitet.
+
+\newpage
+# Verteilungen
+
+## Theoretische und empirische Verteilungen
+
+Erstellen der Daten:
+
+```{r, echo=FALSE}
+set.seed(123)
+sample_data <- data.frame(r=rnorm(n = 750, mean = 4, sd = 2))
+```
+
+```{r, echo=TRUE}
+ggplot(data = sample_data) +
+  geom_histogram(mapping = aes(x=r, stat(density)), binwidth = 0.4) +
+  scale_x_continuous(expand = c(0, 1)) + 
+  scale_y_continuous(name = "Dichte", 
+                     expand = expansion(c(0, 0.05), c(0, 0))) +
+  ggtitle("Eine empirische Verteilung") +
+  theme_icae() +
+  theme(axis.title.x = element_blank(), 
+        plot.title = element_text(size = 16), 
+        axis.title.y = element_text(size = 12))
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+x_vals <- seq(-12, 14, 0.1)
+y_vals_pdf <- data.frame(
+  "x" = x_vals,
+  "mu=2, sigma=2" = dnorm(x_vals, mean = 2, sd = 2),
+  "mu=4, sigma=1" = dnorm(x_vals, mean = 4, sd = 1),
+  "mu=4, sigma=2" = dnorm(x_vals, mean = 4, sd = 2),
+  "mu=4, sigma=4" = dnorm(x_vals, mean = 4, sd = 4)
+) %>%
+  gather("Parameter", "y", -x)
+
+y_vals_pdf %>%
+  filter(Parameter == "mu.4..sigma.1") %>%
+  ggplot(data = .) +
+  geom_line(mapping = aes(x=x, y=y), color="#13294b") +
+  scale_y_continuous(expand = expansion(c(0, 0.05), c(0, 0))) +
+  scale_x_continuous(limits = c(-1, 10)) +
+  theme_icae() + 
+  ylab("Dichte") +
+  ggtitle("Ein theoretische Verteilung") +
+  theme(legend.title = element_text(), 
+        axis.title.x = element_blank(), 
+        legend.position = "none",
+        plot.title = element_text(size = 16), 
+        axis.title.y = element_text(size = 12))
+```
+
+
+```{r, echo=FALSE}
+ggplot(data = sample_data) +
+  geom_histogram(
+    mapping = aes(x=r, stat(density)), 
+    binwidth = 0.4, alpha=0.4) +
+    coord_cartesian(xlim = c(-6, 14)) +
+  geom_line(data = y_vals_pdf, mapping = aes(x=x, y=y, color=Parameter)) +
+  scale_y_continuous(expand = expansion(c(0, 0.05), c(0, 0))) +
+  guides(color = guide_legend(title = TeX("Parameter der Normalverteilung"), 
+                              title.position = "top")) + 
+  scale_color_icae(palette = "mixed", discrete = T,
+                   labels = unname(TeX(c("$\\mu = 2, \\sigma^2 = 4", 
+                                         "$\\mu = 4, \\sigma^2 = 1", 
+                                         "$\\mu = 4, \\sigma^2 = 4", 
+                                         "$\\mu = 4, \\sigma^2 = 16")))
+                   ) +
+  theme_icae() + 
+  ylab("Dichte") +
+  ggtitle("Fits verschiedener Normalverteilungen") +
+  theme(legend.title = element_text(), 
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 16), 
+        axis.title.y = element_text(size = 12))
+```
+
+Wir fitten die Normalverteilung mit dem Paket `fitdistrplus`:
+
+```{r, message=FALSE, warning=FALSE}
+fit_dist <- fitdist(data = sample_data$r, 
+                    distr = "norm")
+fit_dist[["estimate"]]
+```
+
+```{r, message=FALSE, warning=FALSE}
+fit_dist2 <- fitdist(data = sample_data$r, 
+                    distr = "cauchy")
+fit_dist2[["estimate"]]
+```
+
+```{r, echo=FALSE}
+x_vals <- seq(-12, 14, 0.1)
+y_vals_pdf <- data.frame(
+  "x" = x_vals,
+  "Normalverteilung" = dnorm(
+    x_vals, 
+    mean = unname(fit_dist[["estimate"]]["mean"]), 
+    sd = unname(fit_dist[["estimate"]]["sd"])),
+  "Cauchyverteilung" = dcauchy(
+    x_vals, 
+    location = unname(fit_dist2[["estimate"]]["location"]), 
+    scale = unname(fit_dist2[["estimate"]]["scale"]))
+  ) %>%
+  gather("Verteilung", "y", -x)
+
+ggplot(data = sample_data) +
+  geom_histogram(
+    mapping = aes(x=r, stat(density)), 
+    binwidth = 0.4, alpha=0.4) +
+    coord_cartesian(xlim = c(-6, 14)) +
+  geom_line(data = y_vals_pdf, mapping = aes(x=x, y=y, color=Verteilung)) +
+  scale_y_continuous(expand = expansion(c(0, 0.05), c(0, 0))) +
+  theme_icae() + 
+  scale_color_icae(palette = "mixed") +
+  ylab("Dichte") +
+  ggtitle("Fits von Normal und Cauchy") +
+  theme(legend.title = element_blank(), 
+        legend.text = element_text(size = 12),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 16), 
+        axis.title.y = element_text(size = 12))
+```
+
+Der nicht-parametrische Fit:
+
+```{r}
+ggplot(data = sample_data) +
+  geom_histogram(
+    mapping = aes(x=r, stat(density)), 
+    binwidth = 0.4, alpha=0.4) +
+    coord_cartesian(xlim = c(-6, 12)) +
+  stat_density(mapping = aes(x=r), 
+               color="blue", 
+               geom="line") +
+  scale_y_continuous(name = "Dichte",
+                     expand = expansion(c(0, 0.05), c(0, 0))
+                     ) +
+  theme_icae() +
+  theme(legend.title = element_blank(), 
+        legend.text = element_text(size = 12),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 16), 
+        axis.title.y = element_text(size = 12))
+```
+
+```{r}
+ggplot(data = sample_data) +
+  geom_line(data = filter(
+    y_vals_pdf, 
+    Verteilung=="Cauchyverteilung"), 
+            mapping = aes(x=x, y=y)) +
+  stat_density(mapping = aes(x=r), 
+               color="blue", 
+               geom="line") +
+  scale_y_continuous(name = "Dichte",
+                     expand = expansion(c(0, 0.05), c(0, 0))
+                     ) +
+  theme_icae() +
+  theme(legend.title = element_blank(), 
+        legend.text = element_text(size = 12),
+        axis.title.x = element_blank(),
+        plot.title = element_text(size = 16), 
+        axis.title.y = element_text(size = 12))
+```
+
+## Grafische Darstellung
+
+```{r}
+data("anscombe")
+head(anscombe)
+```
+
+Die folgende Tabelle gibt die Werte der quantitativen Kennzahlen an:
+
+| Kennzahl | Wert  |
+|----------|------|
+| Mittelwert von $x$ | ```r round(mean(anscombe$x1), 2)``` |
+| Mittelwert von $y$ | ```r round(mean(anscombe$y1), 2)``` |
+| Varianz von $x$ | ```r round(var(anscombe$x1), 2)``` |
+| Varianz von $y$ | ```r round(var(anscombe$y1), 2)``` |
+| Korrelation zw. $x$ und $y$ | ```r round(cor(anscombe$x1, anscombe$y1), 2)``` |
+
+Nur die grafische Inspektion zeigt, wie unterschiedlich die Verteilungen 
+tatsächlich sind:
+
+```{r, echo=FALSE, out.height = "8cm"}
+ans_1 <- ggplot(anscombe, 
+                aes(x=x1, y=y1)) +
+  geom_point() +
+  xlab("x") + 
+  ylab("y") +
+  ggtitle("Erste Datensatz aus Ascombe's Quartett") +
+  theme_icae()
+
+ans_2 <- ggplot(anscombe, 
+                aes(x=x2, y=y2)) +
+  geom_point() +
+  xlab("x") + 
+  ylab("y") +
+  ggtitle("Zweite Datensatz aus Ascombe's Quartett") +
+  theme_icae()
+
+ans_3 <- ggplot(anscombe, 
+                aes(x=x3, y=y3)) +
+  geom_point() +
+  xlab("x") + 
+  ylab("y") +
+  ggtitle("Dritter Datensatz aus Ascombe's Quartett") +
+  theme_icae()
+
+ans_4 <- ggplot(anscombe, 
+                aes(x=x4, y=y4)) +
+  geom_point() +
+  xlab("x") + 
+  ylab("y") +
+  ggtitle("Vierter Datensatz aus Ascombe's Quartett") +
+  theme_icae()
+
+ans_full <- ggarrange(ans_1, ans_2, ans_3, ans_4,
+                      ncol = 2, nrow = 2)
+ans_full
+```
