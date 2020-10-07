@@ -1,0 +1,640 @@
+---
+title: "Skript zur Vorlesung 6: Datenaufbereitung und -visualisierung"
+author: "Claudius Gräbner"
+date: "KW 49 2020"
+output:
+  pdf_document: 
+    number_sections: true
+    toc: true
+    includes:
+      in_header: preamble.tex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Einleitung
+
+In diesem Dokument werden alle Abbildungen und Tabellen aus der sechsten
+Vorlesung repliziert. 
+Dabei gebe ich der Info wegen *allen* R Code.
+Entsprechend sind bestimmt auch einige Befehle dabei, die Sie jetzt noch nicht
+kennen.
+
+Zudem nehme ich an, dass im Arbeitsverzeichnis der Ordner `data/T6/` existiert
+und in diesem folgende Datensätze enthalten sind (diese sind über die Repository
+zur Vorlesung verfügbar):
+`wb_example.csv`, `wb_unemployment.csv`,
+`data/tidy/export_data.csv`, `export_daten_dt.csv`,
+`export_data.csv`, `bip-lebenserwartung.csv`,
+`government_openness.csv` und 
+`data/tidy/export_daten.csv`.
+
+Folgende Pakete werden zudem in diesem Skript verwendet:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+library(ggpubr)
+library(latex2exp)
+library(icaeDesign)
+library(here)
+library(countrycode)
+library(viridis)
+```
+
+Beachten Sie, dass das Paket [icaeDesign](https://github.com/graebnerc/icaeDesign) 
+nicht über die zentrale Paketverwaltung verfübar ist.
+Es muss folgendermaßen installiert werden:
+
+```{r, eval=FALSE}
+devtools::install_github("graebnerc/icaeDesign")
+```
+
+# Datenaufbereitung 
+
+## Einlesen von Daten
+
+```{r}
+datei_pfad <- here("data/T6/export_data.csv")
+export_daten <- fread(datei_pfad)
+head(export_daten)
+```
+
+Wie Sie sehen ist es immer besser die Spalten-Typen manuell festzulegen, denn
+der `commoditycode` wird sonst als Zahl interpretiert und führende Nullen
+entsprechend eliminiert:
+
+```{r}
+typeof(export_daten[["commoditycode"]])
+```
+
+
+```{r}
+datei_pfad <- here("data/T6/export_data.csv")
+export_daten <- fread(datei_pfad, 
+                      colClasses = c("character", "character", 
+                                     "double", "double")
+                      )
+head(export_daten)
+```
+
+```{r}
+typeof(export_daten[["commoditycode"]])
+```
+
+
+Wenn Sie nicht-standardmäßige csv-Dateien einlesen wollen ist es sinnvoll
+die Spalten- und Kommatrenn-Zeichen explizit zu setzen.
+
+Datei:
+
+```
+iso2c,year,Exporte
+AT,2012,53.97
+AT,2013,53.44
+AT,2014,53.38
+```
+
+Einlesen mit Standardwerten kein Problem:
+
+```{r}
+daten_pfad <- here("data/T6/export_daten.csv")
+daten <- fread(daten_pfad)
+daten
+```
+
+Wenn 'deutsche Variante' mit `;` als Spalten- und `,` als Komma-Trennzeichen:
+
+```
+iso2c;year;Exporte
+AT;2012;53,97
+AT;2013;53,44
+AT;2014;53,38
+```
+
+```{r}
+daten_pfad <- here("data/T6/export_daten_dt.csv")
+daten <- fread(daten_pfad, 
+               colClasses = c("character", "double", "double"), 
+               sep = ";", 
+               dec = ","
+               )
+daten
+```
+
+Um Dateien zu speichern verwenden Sie `fwrite()`:
+
+```{r, eval=FALSE}
+test_data <- data.frame(
+  Land = c("DEU", "DEU"),
+  Jahr = c(2011:2012),
+  BIP = c(1,2)
+)
+
+datei_name <- here("data/T6/test_data.csv")
+fwrite(test_data, file = datei_name)
+```
+
+## Data wrangling
+
+Beispieldaten:
+
+```{r, echo=FALSE}
+exports_unemp_data_tidy <- fread(here("data/T6/wb_example.csv")) %>%
+  rename(Land=iso2c, 
+         Jahr=year,
+         Exporte=NE.EXP.GNFS.ZS, 
+         Arbeitslosigkeit=SL.UEM.TOTL.ZS) %>%
+  filter(Jahr>2012) %>%
+  select(-country)
+```
+
+### Breite und weite Datensätze
+
+```{r, echo=FALSE}
+data_wide <- exports_unemp_data_tidy %>%
+  select(-Exporte) %>%
+  gather(Variable, Werte, -Land, -Jahr) %>%
+  spread(Jahr, Werte) %>%
+  select(-Variable)
+```
+```{r}
+data_wide
+```
+
+Daten können folgendermaßen 'länger' gemacht werden:
+
+```{r}
+data_long <- pivot_longer(data = data_wide,
+                          cols = one_of("2013", "2014"), 
+                          names_to = "Jahr", 
+                          values_to = "Arbeitslosenquote")
+data_long
+```
+
+Um Daten 'breiter' zu machen gehen wir folgendermaßen vor:
+
+```{r}
+data_wide_neu <- pivot_wider(data = data_long,
+                             id_cols = one_of("Land"), 
+                             names_from = "Jahr", 
+                             values_from = "Arbeitslosenquote")
+data_wide_neu
+```
+
+Hier eine kombinierte Anwendung:
+
+```{r, echo=FALSE}
+data_al_exp <- fread(here("data/T6/wb_example.csv")) %>%
+  rename(Land=iso2c, 
+         Jahr=year,
+         Exporte=NE.EXP.GNFS.ZS, 
+         Arbeitslosigkeit=SL.UEM.TOTL.ZS) %>%
+  select(-country) %>%
+  pivot_longer(cols = one_of("Exporte", "Arbeitslosigkeit"), 
+               names_to = "Variable", 
+               values_to = "Wert") %>%
+  pivot_wider(id_cols = one_of("Land", "Variable"), 
+              names_from = "Jahr", 
+              values_from = "Wert") 
+data_al_exp
+```
+
+Sie können mehrere Operationen übersichtlicher und kompakter schreiben wenn Sie
+die Pipe `%>%` verwenden. Sie wird über das Paket `magrittr` bereitgestellt,
+das auch Teil des `tidyverse` ist.
+Ohne die Pipe sähe der Code so aus:
+
+```{r, eval=FALSE}
+data_al_exp_longer <- pivot_longer(data = data_al_exp, 
+                                   cols = -one_of("Land", "Variable"), 
+                                   names_to = "Jahr", 
+                                   values_to = "Wert")
+
+data_al_exp_tidy <- pivot_wider(data = data_al_exp_longer, 
+                                id_cols = one_of("Land", "Jahr"), 
+                                values_from = "Wert", 
+                                names_from = "Variable")
+```
+
+Mit `%>%` lässt sich dies kompakter und lesbarer darstellen:
+
+```{r, eval=FALSE}
+data_al_exp_tidy <- data_al_exp %>%
+  pivot_longer(
+    cols = -one_of("Land", "Variable"), 
+    names_to = "Jahr", 
+    values_to = "Wert") %>%
+  pivot_wider(
+    id_cols = one_of("Land", "Jahr"), 
+    values_from = "Wert", 
+    names_from = "Variable")
+```
+
+
+### Datensätze kombinieren
+
+Die Daten wurden manuell erstellt:
+
+```{r, echo=FALSE}
+data_BIP <- data.frame(
+  Jahr = rep(2010:2012, 2),
+  Land = c(rep("DEU", 3), rep("AUT", 3)),
+  BIP = c(1,2,3,4,5,6)
+)
+
+data_gini <- data.frame(
+  year = c(2010:2011, 2012:2013),
+  country = c(rep("DEU", 2), rep("AUT", 2)),
+  Gini = c(1,2,3,4)
+)
+```
+
+**Anwendung von `left_join()**
+
+```{r}
+data_bip_gini_left_join <- left_join(data_BIP, data_gini, 
+                                     by=c("Jahr"="year", "Land"="country"))
+data_bip_gini_left_join
+```
+
+**Anwendung von `right_join()**
+
+```{r}
+data_gini_bip_right_join <- right_join(data_gini, data_BIP, 
+                                       by=c("year"="Jahr", "country"="Land"))
+data_gini_bip_right_join
+```
+
+**Anwendung von `inner_join()**
+
+```{r}
+data_bip_gini_inner_join <- inner_join(data_BIP, data_gini, 
+                                      by=c("Jahr"="year", "Land"="country"))
+data_bip_gini_inner_join
+```
+
+**Anwendung von `full_join()**
+
+```{r}
+data_bip_gini_full_join <- full_join(data_BIP, data_gini, 
+                                      by=c("Jahr"="year", "Land"="country"))
+data_bip_gini_full_join
+```
+
+
+### Filtern und Selektieren
+
+```{r, echo=FALSE}
+data_al_exp_tidy <- fread(here("data/T6/wb_example.csv")) %>%
+  rename(Land=iso2c, 
+         Jahr=year,
+         Exporte=NE.EXP.GNFS.ZS, 
+         Arbeitslosigkeit=SL.UEM.TOTL.ZS) %>%
+  select(-country) %>%
+  pivot_longer(cols = one_of("Exporte", "Arbeitslosigkeit"), 
+               names_to = "Variable", 
+               values_to = "Wert") %>%
+  pivot_wider(id_cols = one_of("Land", "Variable"), 
+              names_from = "Jahr", 
+              values_from = "Wert") %>%
+  pivot_longer(
+    cols = -one_of("Land", "Variable"), 
+    names_to = "Jahr", 
+    values_to = "Wert",
+    data = .) %>%
+  pivot_wider(
+    id_cols = one_of("Land", "Jahr"), 
+    values_from = "Wert", 
+    names_from = "Variable",
+    data = .)
+```
+
+Um Spalten zu selektieren verwenden wir `select`:
+
+```{r}
+head(
+  select(data_al_exp_tidy, Land, Exporte), 
+  2)
+```
+
+Spalten können auch ausgeschlossen werden:
+
+```{r}
+head(
+  select(data_al_exp_tidy, -Exporte), 
+  2)
+```
+
+Mit Hilfe von `one_of()` können wir Spalten über `character` ansprechen 
+(zudem gibt R hier keinen Fehler aus wenn eine Spalte nicht existiert, daher 
+auch der Name):
+
+```{r}
+head(
+  select(data_al_exp_tidy, one_of("Land", "Jahr")), 
+  2)
+```
+
+Auch der Ausschluss von Spalten funktioniert mit `one_of()`:
+
+```{r}
+head(
+  select(data_al_exp_tidy, -one_of("Land", "Jahr")), 
+  2)
+```
+
+Bessere Formulierung:
+
+```{r}
+data_al_exp_selected <- data_al_exp_tidy %>%
+  select(one_of("Land", "Jahr", "Exporte"))
+head(data_al_exp_selected, 2)
+```
+
+Um Zeilen zu filtern:
+
+```{r}
+data_al_exp_filtered <- data_al_exp_tidy %>%
+  filter(Land == "AT",
+         Jahr > 2012)
+data_al_exp_filtered
+```
+
+Um Spalten umzubenennen:
+
+```{r}
+data_al_exp_tidy %>%
+  rename(country=Land, 
+         year_observation=Jahr, 
+         exports=Exporte, 
+         unemployment=Arbeitslosigkeit)
+```
+
+### Daten ändern und zusammenfassen
+
+```{r, echo=FALSE}
+unemp_data_wb <- fread(here("data/T6/wb_unemployment.csv"), 
+                       colClasses = c(rep("character", 2), rep("double", 6))
+                       ) %>%
+  select(-country) %>%
+  rename(country=iso2c) %>%
+  select(one_of("country", "year", "laborforce_female", 
+                "workforce_total", "population_total"))
+```
+
+Eine Spalte ändern:
+
+```{r}
+unemp_data_wb <- unemp_data_wb %>%
+  mutate(
+    country = countrycode(country, "iso2c", "iso3c")
+    )
+head(unemp_data_wb, 2)
+```
+
+Eine neue Spalte hinzufügen:
+
+```{r}
+unemp_data_wb <- unemp_data_wb %>%
+  mutate(
+    workers_female_total = laborforce_female*workforce_total/100
+    )
+head(unemp_data_wb, 2)
+```
+
+Zusammenfassen:
+
+```{r}
+unemp_data_wb_summarized <- unemp_data_wb %>%
+  summarise(
+    fem_workers_avg = mean(workers_female_total)
+    )
+unemp_data_wb_summarized
+```
+
+Gruppiertes Zusammenfassen:
+
+```{r, message=FALSE}
+unemp_data_wb %>%
+  group_by(country) %>%
+  summarise(
+    fem_workers_avg = mean(workers_female_total)
+    ) %>%
+  ungroup()
+```
+
+## Visualisierung
+
+### Laufendes Beispiel
+
+```{r, warning=FALSE, message=FALSE}
+aut_trade <- fread(here("data/T6/government_openness.csv")) %>%
+  select(iso3c, year, trade_total_GDP, gvnt_cons) %>%
+  rename(Land=iso3c, Jahr=year, 
+         HandelGDP=trade_total_GDP, 
+         StaatsausgabenGDP=gvnt_cons) %>%
+  select(Land, Jahr, HandelGDP) %>%
+  filter(Land=="AUT")
+
+aut_trade_plot <- ggplot(
+  data = aut_trade, 
+  mapping = aes(x = Jahr, 
+                y = HandelGDP)
+) + 
+  geom_line() +
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(
+    limits = c(1965, 2018), 
+    breaks = seq(1960, 2017, 5), 
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(
+    name = "Handel / BIP",  
+    limits = c(0, 110), 
+    breaks = seq(0, 110, 10),
+    expand = c(0, 0)
+  ) + 
+  ggtitle(
+    label = "Handel und BIP in Österreich", 
+    subtitle = "Die Entwicklung zwischen 1965 und 2018"
+    ) +
+  theme(
+    panel.background = element_rect(fill = "white"), 
+    panel.grid.major = element_line(colour = "grey"),
+    panel.grid.minor = element_blank(), 
+    axis.line = element_line(colour = "black"), 
+    axis.ticks = element_blank() 
+  )
+aut_trade_plot
+```
+
+### Streudiagramm
+
+```{r, echo=FALSE}
+offenheits_daten <- fread(
+  here("data/T6/government_openness.csv")
+  ) %>%
+  filter(
+    year > 1990, year <= 2017,    
+    iso3c %in% c("GRC", "NLD", "SWE", "HUN", "DEU", "AUT")
+  )  %>%
+  dplyr::mutate(
+    Land=countrycode::countrycode(iso3c, "iso3c", "country.name.de")
+    ) %>%
+  select(
+    one_of("year", "Land", "trade_total_GDP", "gvnt_cons")
+    )
+```
+
+
+```{r}
+streudiagramm <- ggplot(
+  data = offenheits_daten, 
+  mapping = aes(x=trade_total_GDP, 
+                y=gvnt_cons)
+  ) +
+  geom_point(alpha=0.75) +
+  scale_y_continuous(name = "Regierungsausgaben") +
+  scale_x_continuous(name = TeX("$\\frac{IMP + EXP}{BIP}\\cdot 100\\%$"), 
+                     breaks = seq(30, 180, 10),
+                     labels = scales::percent_format(accuracy = 1, scale = 1)
+                     )+
+  labs(
+    title = "Handelsoffenheit & Regierungsaktivität in Europa",
+    caption = "Quelle: Weltbank; Daten von 1990-2017."
+    ) +
+  theme_icae() 
+streudiagramm
+```
+
+
+### Blasendiagramm
+
+```{r, echo=FALSE}
+bip_lebenserwartung_data <- fread(here("data/T6/bip-lebenserwartung.csv"), 
+                                  colClasses = c("character", "character", 
+                                                 rep("double", 3)))
+```
+
+
+```{r}
+bubble_plot <- ggplot(
+  data = bip_lebenserwartung_data, 
+  mapping = aes(x = gdpPercap, 
+                y = lifeExp, 
+                size = pop, 
+                fill = continent)
+    ) +
+  geom_point(
+    alpha=0.5, shape=21, color="black"
+    ) +
+  scale_size(
+    range = c(0.1, 24), name="Bevölkerung", guide = FALSE
+    ) +
+  scale_y_continuous(
+    name = "Lebenserwartung in Jahren"
+    ) +
+  scale_x_continuous(
+    name = "BIP pro Kopf (1000 PPP)"
+    ) +
+  labs(
+    caption = "Hinweis: Größe der Blasen repräsentiert Bevölkerungsanzahl. Quelle: Gapminder."
+    ) +
+  theme_icae() +
+  theme(
+    legend.position="bottom",
+    plot.caption = element_text(hjust = 0)
+    )
+bubble_plot
+```
+
+Um das schöne Farbschema aus den Slides zu bekommen verwenden wir die Funktion
+`scale_fill_viridis()`, welche das schöne und gut lesbare
+[Viridis-Farbschema](https://ggplot2.tidyverse.org/reference/scale_viridis.html) 
+implementiert: 
+
+```{r}
+bubble_plot + 
+  scale_fill_viridis(
+    discrete=TRUE, 
+    option="A"
+    ) 
+```
+
+
+### Histogramm
+
+```{r, echo=FALSE}
+set.seed(123)
+histogram_daten <- data.frame(x = rnorm(500))
+```
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(data = histogram_daten, 
+       mapping = aes(x=x)) +
+  geom_histogram(alpha=0.75, color=NA, fill="#002966") + 
+  scale_y_continuous(name = "Häufigkeit", 
+                     expand = expand_scale(c(0, 0), c(0, 1))) +
+  ggtitle("Histogram mit 30 Balken") + 
+  theme_icae() +
+  theme(axis.title.x = element_blank())
+```
+
+Im folgenden sehen Sie auch den großen Effekt unterschiedlicher Balkendicken:
+
+```{r}
+bin_size <- c(5, 20, 50, 100)
+hist_list <- list()
+for (i in 1:length(bin_size)){
+  hist_list[[i]] <- ggplot(data = histogram_daten, 
+       mapping = aes(x=x)) +
+  geom_histogram(alpha=0.75, color=NA, fill="#002966", bins = bin_size[i]) + 
+  scale_y_continuous(name = "Häufigkeit", 
+                     expand = expansion(c(0, 0), c(0, 1))) +
+  ggtitle(paste0("Histogram mit ", bin_size[i], " Balken")) + 
+  theme_icae() +
+  theme(axis.title.x = element_blank())
+}
+ggarrange(plotlist = hist_list, ncol = 2, nrow = 2)
+```
+
+
+### Dichtefunktion
+
+```{r, echo=FALSE}
+exportzusammensetzung <- fread(
+  here("data/T6/export_data.csv"), 
+  colClasses = c("character", "character", "double", "double")
+  ) %>%
+  mutate(cgroup=ifelse(
+    cgroup=="Core countries", "Kernländer", "Peripherieländer"))
+```
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(data = exportzusammensetzung, 
+       mapping = aes(
+         x=pci, 
+         color=cgroup, 
+         fill=cgroup)
+       ) + 
+  geom_density(
+    mapping = aes(weight=exp_share), 
+    alpha=0.5
+    ) + 
+  labs(
+    title = "Produktkomplexität von Exportkörben (2000-2017)",
+    caption = "Quelle: Gräbner et al. (2020, CJE)"
+    ) + 
+  ylab("Dichte der Produkte im Exportkorb") +
+  xlab("Produktkomplexität") +
+  scale_y_continuous(limits = c(0, 0.62), expand = c(0, 0)) +
+  scale_x_continuous(limits = c(-3, 3), expand = c(0, 0)) +
+  scale_color_icae(palette = "mixed", aesthetics = c("color", "fill")) +
+  theme_icae() +
+  theme(legend.position = c(0.175, 0.8))
+```

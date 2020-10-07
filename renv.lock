@@ -219,6 +219,13 @@
       "Repository": "CRAN",
       "Hash": "b55c32ae818a84109a51f172290c95f2"
     },
+    "countrycode": {
+      "Package": "countrycode",
+      "Version": "1.2.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "c46036853ef73486af84ec5dc5b2443f"
+    },
     "cowplot": {
       "Package": "cowplot",
       "Version": "1.0.0",
