@@ -1,0 +1,204 @@
+---
+title: "Replikations-Skript zur Vorlesung 11: Logit- und Probit-Modelle"
+author: "Claudius Gräbner"
+date: "KW 4 2021"
+output:
+  pdf_document: 
+    number_sections: true
+    toc: true
+    includes:
+      in_header: preamble.tex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(out.height = "6cm")
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+In diesem Dokument werden alle Abbildungen und Tabellen aus der siebten
+Vorlesung repliziert. 
+Dabei gebe ich der Info wegen *allen* R Code.
+Entsprechend sind bestimmt auch einige Befehle dabei, die Sie jetzt noch nicht
+kennen.
+
+Zudem nehme ich an, dass im Arbeitsverzeichnis der Ordner `data/T11/` existiert
+und in diesem der Datensatz `nonlinmodels_schweizer-arbeit.csv` enthalten ist 
+(dieser ist über die Repository zur Vorlesung verfügbar).
+
+Folgende Pakete werden zudem in diesem Skript verwendet:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+library(ggpubr)
+library(latex2exp)
+library(here)
+library(icaeDesign)
+```
+
+Beachten Sie, dass das Paket [icaeDesign](https://github.com/graebnerc/icaeDesign) 
+nicht über die zentrale Paketverwaltung verfübar ist.
+Es muss folgendermaßen installiert werden:
+
+```{r, eval=FALSE}
+devtools::install_github("graebnerc/icaeDesign")
+```
+
+```{r}
+schweiz_al <- fread(here("data/T11/nonlinmodels_schweizer-arbeit.csv"), 
+                    colClasses = c("double", rep("double", 5), "factor"))
+```
+
+# Motivation
+
+```{r, message=FALSE}
+ols_nonlin <- ggplot(
+  data = schweiz_al,
+  mapping = aes(x=Einkommen_log, y=Arbeitslos, group=1)) +
+  scale_x_continuous(limits = c(7, 14)) +
+  labs(
+    title = "Einkommen und Arbeitslosigkeit",
+    y = "Arbeitslosigkeit", 
+    x = "Arbeitsunabh. Einkommen (log)" # ,
+    # caption = "Daten: Kleiber & Zeilis (2008)."
+  ) +
+  geom_point() + geom_smooth(method = "lm", fullrange=TRUE) + 
+  theme_icae() +
+  theme(axis.title = element_text(size=12), 
+        plot.title = element_text(size=13)
+        )
+
+ggsave(plot = ols_nonlin, 
+       filename = here("figures/T11/01_ols-nonlin.pdf"), 
+       width = 4, height = 3)
+
+ols_nonlin
+```
+
+```{r, message=FALSE}
+logit_expl <- ggplot(
+  data = schweiz_al,
+  mapping = aes(x=Einkommen_log, y=Arbeitslos, group=1)) +
+  scale_x_continuous(limits = c(7, 14)) +
+    labs(
+    title = "Einkommen und Arbeitslosigkeit",
+    y = "Arbeitslosigkeit", 
+    x = "Arbeitsunabh. Einkommen (log)" # ,
+    # caption = "Daten: Kleiber & Zeilis (2008)."
+  ) +
+  geom_point() + 
+  geom_smooth(aes(y=Arbeitslos), method = "glm",
+                             method.args = list(family = "binomial"), 
+                             fullrange=TRUE, se = TRUE) + 
+  theme_icae() +
+  theme(axis.title = element_text(size=12), 
+        plot.title = element_text(size=13)
+        )
+
+ggsave(plot = logit_expl, 
+       filename = here("figures/T11/02_logit-expl.pdf"), 
+       width = 4, height = 3)
+
+logit_expl
+```
+
+# Schätzung der Modelle
+
+Das *logit*-Modell:
+
+```{r}
+arbeitslogit_test <- glm(
+  Arbeitslos ~ Einkommen_log + Alter, 
+  family = binomial(link = "logit"), 
+  data = schweiz_al)
+```
+
+Das *probit*-Modell:
+
+```{r}
+arbeitsprobit_test <- glm(
+  Arbeitslos ~ Einkommen_log + Alter, 
+  family = binomial(link = "probit"), 
+  data = schweiz_al)
+```
+
+```{r}
+summary(arbeitslogit_test)
+```
+
+```{r, message=FALSE}
+logit_probit <- ggplot(
+  data = schweiz_al,
+  mapping = aes(x=Einkommen_log, y=Arbeitslos, group=1)) +
+  ggtitle("Logit vs. Probit") +
+  ylab("Arbeitslosigkeit") + xlab("Arbeitsunabh. Einkommen (log)") +
+  geom_point() + scale_x_continuous(limits = c(5, 17)) +
+  scale_color_viridis_d() +
+  geom_smooth(
+    aes(y=Arbeitslos, color="logit"), method = "glm", 
+    method.args = list(family = binomial(link = "logit")), 
+    fullrange=TRUE, se = FALSE, alpha=0.5) + 
+    geom_smooth(
+    aes(y=Arbeitslos, color="probit"), method = "glm", 
+    method.args = list(family = binomial(link = "probit")), 
+    fullrange=TRUE, se = FALSE, alpha=0.5) + 
+  theme_icae() +
+  theme(axis.title = element_text(size=12), 
+        plot.title = element_text(size=13)
+        )
+
+ggsave(plot = logit_probit, 
+       filename = here("figures/T11/03_logit-probit.pdf"), 
+       width = 4, height = 3)
+
+logit_probit
+```
+
+# Interpretation der Ergebnisse
+
+```{r}
+arbeitslogit <- glm(
+  Arbeitslos ~ Einkommen_log + Alter + Ausbildung_Jahre + Kinder_jung + 
+    Kinder_alt + Auslaender, 
+  family = binomial(link = "logit"), 
+  data = schweiz_al)
+summary(arbeitslogit)
+```
+
+```{r}
+predicted_probs <- predict(object = arbeitslogit, 
+        newdata = data.frame(
+          "Einkommen_log" = c(10, 10), 
+          "Alter"=c(30, 30), 
+          "Ausbildung_Jahre" = c(5, 5),
+          "Kinder_alt" = c(0, 0), 
+          "Kinder_jung"= c(1, 2),
+          "Auslaender" = factor(c(0, 0))
+          ),
+        type = "response")
+predicted_probs
+```
+
+```{r}
+diff(predicted_probs)
+```
+
+```{r}
+diff(
+  predict(object = arbeitslogit, 
+        newdata = data.frame(
+          "Einkommen_log" = c(10, 10), 
+          "Alter"=c(30, 30), 
+          "Ausbildung_Jahre" = c(5, 5),
+          "Kinder_alt" = c(0, 0), 
+          "Kinder_jung"= c(1, 2),
+          "Auslaender" = factor(c(1, 1))
+          ),
+        type = "response")
+)
+```
+
+
+

@@ -24,8 +24,8 @@ Entsprechend sind bestimmt auch einige Befehle dabei, die Sie jetzt noch nicht
 kennen.
 
 Zudem nehme ich an, dass im Arbeitsverzeichnis der Ordner `data/T10/` existiert
-und in diesem der Datensatz `wb_bip_ineq_mort.csv` enthalten sind 
-(diese ist über die Repository zur Vorlesung verfügbar).
+und in diesem der Datensatz `wb_bip_ineq_mort.csv` enthalten ist 
+(dieser ist über die Repository zur Vorlesung verfügbar).
 
 Folgende Pakete werden zudem in diesem Skript verwendet:
 
