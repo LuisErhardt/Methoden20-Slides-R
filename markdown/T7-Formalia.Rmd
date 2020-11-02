@@ -51,6 +51,47 @@ devtools::install_github("graebnerc/icaeDesign")
 
 # Wachstumsraten
 
+## Darstellung durch Logarithmus
+
+Wir starten mit $x=2$ und lassen die Variable über 100 Schritte mit mit 4% 
+pro Zeitschritt wachsen:
+
+```{r}
+x <- c(2, rep(NA, 99))
+
+for (i in 1:length(x)){
+  x[i+1] <- x[i] * 1.04
+}
+
+x_data <- data.frame(
+  t = 1:101,
+  x = x
+)
+```
+
+Hier sehen wir, wie sich in der semi-log Darstellung eine gerade Linie ergibt:
+
+```{r}
+p1 <- ggplot(
+  data = x_data,
+  mapping = aes(x=t, y=x)) +
+  geom_line() +
+  labs(title = "Normale Darstellung") +
+  theme_bw() + theme(
+    panel.border = element_blank(),
+    axis.line = element_line()
+  )
+
+p2 <- p1 +
+  labs(title = "Semi-log Darstellung", y="log(x)") +
+  scale_y_continuous(trans = "log")
+
+ggpubr::ggarrange(p1, p2, ncol = 2)
+```
+
+
+## Gruppierung und Berechnung
+
 ```{r}
 beispiel_daten <- fread(
   here("data/T7/bip_growth.csv")
@@ -237,7 +278,23 @@ Solve(A = A_keynes, b = d_keynes)
 
 ## Beispiel OLS
 
-Nehmen wir folgenden Datensatz an:
+Wir wissen nun, dass wir das lineare 
+Regressionsmodell mit $n$ Beobachtungen von $p$ Variablen
+
+\begin{align}
+y_1 = \beta_0 + \beta_1 x_{11} + \beta_2 x_{12} + ... + \beta_p x_{1p} + \epsilon_1\nonumber\\
+y_2 = \beta_0 + \beta_1 x_{21} + \beta_2 x_{22} + ... + \beta_p x_{2p} + \epsilon_2\nonumber\\
+\vdots \nonumber\\
+y_n = \beta_0 + \beta_1 x_{n1} + \beta_2 x_{n2} + ... + \beta_p x_{np} + \epsilon_n\nonumber
+\end{align}
+
+auch folgendermaßen schreiben können:
+
+\begin{align}
+\boldsymbol{Y} = \boldsymbol{X\beta} + \boldsymbol{\epsilon}
+\end{align}
+
+Nehmen wir jetzt folgenden Datensatz an:
 
 ```{r}
 ols_beispiel <- fread(here("data/T7/AutoDaten.csv"), 
@@ -251,9 +308,9 @@ Dies können wir schreiben als:
 
 \begin{align}
 y_1 = \beta_0 + \beta_1 x_{11} + \beta_2 x_{12} + \epsilon_{1} \nonumber\\
-y_1 = \beta_0 + \beta_1 x_{21} + \beta_2 x_{32} + \epsilon_{2} \nonumber\\
-y_1 = \beta_0 + \beta_1 x_{31} + \beta_2 x_{32} + \epsilon_{3} \nonumber\\
-y_1 = \beta_0 + \beta_1 x_{41} + \beta_2 x_{42} + \epsilon_{4} \nonumber\\
+y_2 = \beta_0 + \beta_1 x_{21} + \beta_2 x_{22} + \epsilon_{2} \nonumber\\
+y_3 = \beta_0 + \beta_1 x_{31} + \beta_2 x_{32} + \epsilon_{3} \nonumber\\
+y_4 = \beta_0 + \beta_1 x_{41} + \beta_2 x_{42} + \epsilon_{4} \nonumber\\
 \end{align}
 
 und mit Zahlen:

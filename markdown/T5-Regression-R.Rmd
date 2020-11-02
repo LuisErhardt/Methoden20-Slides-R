@@ -379,23 +379,23 @@ ggplot(datensatz, aes(x=x, y=y)) +
       colour =  get_icae_colors("dark blue")
       ) +
     annotate(geom = "text", 
-           label=TeX("$\\epsilon_1$"), 
+           label=TeX("$e_1$"), 
            x = datensatz$x[1]-0.007, y = 2.75,
            colour = get_icae_colors("dark blue")) +
       annotate(geom = "text", 
-           label=TeX("$\\epsilon_2$"), 
+           label=TeX("$e_2$"), 
            x = datensatz$x[2]-0.008, y = 3.15,
            colour = get_icae_colors("dark blue")) +
       annotate(geom = "text", 
-           label=TeX("$\\epsilon_3$"), 
+           label=TeX("$e_3$"), 
            x = datensatz$x[3]-0.008, y = 4.45,
            colour = get_icae_colors("dark blue")) +
       annotate(geom = "text", 
-           label=TeX("$\\epsilon_4$"), 
+           label=TeX("$e_4$"), 
            x = datensatz$x[4]-0.008, y = 3.8,
            colour = get_icae_colors("dark blue")) +
       annotate(geom = "text", 
-           label=TeX("$\\epsilon_5$"), 
+           label=TeX("$e_5$"), 
            x = datensatz$x[5]-0.008, y = 3.95,
            colour = get_icae_colors("dark blue")) + 
       annotate(geom = "text", 
@@ -615,8 +615,8 @@ summary(reg_einfach)
 Und die Schätzung von 
 
 ```{r}
-reg_einfach <- lm(Preis~Seitenanzahl + Zitationen, data = journale)
-summary(reg_einfach)
+reg_mult <- lm(Preis~Seitenanzahl + Zitationen, data = journale)
+summary(reg_mult)
 ```
 
 Man beachte der veränderten Koeffizienten von `Seitenanzahl` im Vergleich zu

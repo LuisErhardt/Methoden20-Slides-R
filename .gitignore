@@ -2,6 +2,8 @@
 .Rhistory
 .Rproj.user/
 markdown/*.log
+markdown/*.md
+markdown/*.tex
 *~
 renv/library/
 renv/python/
