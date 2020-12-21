@@ -125,7 +125,7 @@ data <- data.frame(x=seq(-2, 2, 0.05)) %>%
 fun_max <- ggplot(data, aes(x=x, y=y_2)) +
   geom_line() +
     labs(
-    title = TeX("$f(x)=x^2 + 4$"),
+    title = TeX("$f(x)=-x^2 + 4$"),
     x="x", y="y"
   ) +
   geom_segment(x=0, xend=0, y=0, yend=4, linetype=2) +
@@ -138,7 +138,7 @@ fun_max <- ggplot(data, aes(x=x, y=y_2)) +
 fun_deriv <- ggplot(data, aes(x=x, y=y_3)) +
   geom_line() +
   labs(
-    title = TeX("$f'(x)=2x$"),
+    title = TeX("$f'(x)=-2x$"),
     x="x", y="y"
   ) +
   geom_segment(x=0, xend=0, y=-Inf, yend=0, linetype=2) +
