@@ -6,6 +6,7 @@ library(here)
 
 # Wir nehmen das Beispiel aus T9 zum Zusammenhang zwischen sozialer
 # Kohäsion und Selbstmordwahrscheinlichkeit:
+set.seed(123)
 n_obs <- 1000
 soz_koh <- seq(-0.5, 0.5, length.out = n_obs)
 p_selbstmord <- soz_koh**2 + rnorm(n_obs, mean = 0, sd = 0.005)
@@ -28,6 +29,26 @@ selbstmord_daten_plot <- ggplot(
 
 ggsave(plot = selbstmord_daten_plot, 
        filename = here("figures/T10/04_DurkheimDaten.pdf"), 
+       width = 6, height = 3)
+
+selbstmord_daten_plot_log <- selbstmord_daten %>%
+  mutate(
+    Zusammenhalt=log(Zusammenhalt + 0.51),
+    Selbstmordwahrscheinlichkeit_log = log(Selbstmordwahrscheinlichkeit+0.05)
+    ) %>%
+  ggplot(
+  data = ., 
+  mapping = aes(x=Zusammenhalt, y=Selbstmordwahrscheinlichkeit)
+) +
+  geom_point(alpha=0.25, size=0.2) +
+  labs(title = "Selbstmordraten a la Durkheim (log)", 
+       x="Zusammenhalt + 0.51 (log)", 
+       y="Selbstmordwahrscheinlichkeit + 0.05 (log)") +
+  theme_icae()
+
+ggsave(plot = ggarrange(selbstmord_daten_plot, 
+                        selbstmord_daten_plot_log, ncol = 2), 
+       filename = here("figures/T10/04_DurkheimDaten_log.pdf"), 
        width = 6, height = 3)
 
 # Schätzung verschiedener Modelle----------------------------------------------
