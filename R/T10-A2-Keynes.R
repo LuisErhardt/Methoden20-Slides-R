@@ -49,16 +49,16 @@ konsum_daten_plot <- ggplot(
   theme_icae()
 
 konsum_daten_bias_plot <- konsum_daten_plot +
-  labs(title = "Simulatanitätsproblematik") +
+  labs(title = "Simultanitätsproblematik") +
   geom_line(
     data = modernes_modell_predictions, 
-    aes(x=Einkommen, y=Konsum_predict, color = "Wahr"),
+    aes(x=Einkommen, y=Konsum_predict, color = "Geschätzt"),
     key_glyph = draw_key_rect
     
   ) +
   geom_line(
     data = modernes_modell_predictions, 
-    aes(x=Einkommen, y=Konsum_predict_correct, color = "Geschätzt"),
+    aes(x=Einkommen, y=Konsum_predict_correct, color = "Wahr"),
     key_glyph = draw_key_rect
   ) +
   scale_color_manual(values = cols)
