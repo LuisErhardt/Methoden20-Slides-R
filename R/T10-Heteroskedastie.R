@@ -2,6 +2,7 @@ library(tidyverse)
 library(stargazer)
 library(here)
 library(ggpubr)
+library(icaeDesign)
 
 dgp <- function(x1, x2, beta0, beta1, beta2, hetero=FALSE){
   y <- rep(NA, length(x1))
@@ -56,5 +57,5 @@ hetero_plot <- ggplot(data = full_data_hetero, aes(x=Einkommen, y=Erfolg)) +
 heterosk_plot <- ggarrange(homo_plot, hetero_plot, ncol = 2)
 
 ggsave(plot = heterosk_plot,
-       filename = here("figures/T10/99_hetero1.pdf"), 
+       filename = here("figures/T10/hetero1.pdf"), 
        width = 5, height = 3)

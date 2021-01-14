@@ -3,6 +3,7 @@ library(latex2exp)
 library(stargazer)
 library(ggpubr)
 library(here)
+library(icaeDesign)
 
 # Betrachtung des Collider-Bias
 
@@ -127,6 +128,6 @@ red_estimation
 collider_bias_full <- ggarrange(red_estimation, full_estimation, ncol = 2)
 
 ggsave(plot = collider_bias_full, 
-       filename = here("figures/T10/99_collider.pdf"), 
+       filename = here("figures/T10/collider.pdf"), 
        width = 8, height = 3)
   
