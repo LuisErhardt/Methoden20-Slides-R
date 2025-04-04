@@ -1,0 +1,405 @@
+---
+title: "Skript zur Vorlesung 5: Das lineare Regressionsmodell"
+author: "Luis Erhardt"
+date: "2025"
+output:
+  pdf_document: 
+    number_sections: true
+    toc: true
+    includes:
+      in_header: preamble.tex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+# Einleitung
+
+In diesem Dokument werden die Abbildungen aus der fünften
+Vorlesung repliziert. 
+
+
+Folgende Pakete wurden verwendet:
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(rmarkdown)
+library(testthat)
+library(ggplot2)
+library(knitr)
+library(data.table)
+library(ggpubr)
+library(car)
+```
+
+# Einfache Regression zum Zusammenhang zwischen Gewerkschaften und Innovationstätigkeit
+
+Die Daten werden eingelesen und zwei Spalten angepasst.
+```{r}
+oecd_data <- fread(here::here("data/T5/oecd_data.csv"))
+
+oecd_data <- dplyr::mutate(oecd_data, "GDPpc"=GDP/POP*1000000)
+
+oecd_data <- dplyr::mutate(oecd_data, "LME"=dplyr::if_else(Country %in% c("AUS","USA"),1,0))
+
+```
+
+Nun formulieren wir die Regression und geben deren Werte aus:
+```{r}
+techmodel1 <- lm(Tech ~ UnionDensity, data=oecd_data)
+summary(techmodel1)
+```
+
+
+## Scatterplot
+```{r}
+scatterplot_tm1 <- ggplot2::ggplot(
+  data = oecd_data,
+  mapping = aes( 
+    x=UnionDensity, 
+    y=Tech) 
+  ) +
+  ggplot2::layer( 
+    geom = "point", 
+    stat = "identity",
+    position = "identity" 
+    ) +
+  ggplot2::geom_smooth( 
+    method = "lm", se = FALSE) +
+  ggplot2::scale_x_continuous(name = "Gewerkschaftsdichte (in %)") +
+  ggplot2::scale_y_continuous(name = "Ausgaben für R&D (in % des BIP)") + 
+  ggplot2::scale_color_discrete(name="Land") + 
+  ggplot2::labs(title = "Gewerkschaften & Innovation 1990-2019") +  
+  ggplot2::coord_cartesian() + 
+  ggplot2::facet_null() 
+
+scatterplot_tm1
+
+```
+
+## Residuenplot
+
+```{r}
+resids <- as.data.table(techmodel1[["residuals"]])
+typeof(resids)
+
+Techm1_Residuen <- ggplot2::ggplot(
+  data = resids,  
+  mapping = aes( 
+   x=1:258,
+    y=V1)) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+ ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Beobachtungen") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Techm1_Residuen
+```
+
+## Tukey Anscombe Plot
+
+```{r}
+TAdata <- data.table("resids"=techmodel1[["residuals"]], "fittedvalues"=predict(techmodel1))
+
+Techm1_TA <- ggplot2::ggplot(
+  data = TAdata,
+  mapping = aes(
+   x=fittedvalues,
+    y=resids) 
+  ) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+   ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Geschätzte Werte (Prognose)") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Techm1_TA
+```
+
+## Scatterplot mit Farben für verschiedene Länder
+
+```{r}
+scatterplot_tm1_c <- ggplot2::ggplot( 
+  data = oecd_data,  
+  mapping = aes( 
+    x=UnionDensity, 
+    y=Tech) 
+  ) +
+  ggplot2::layer(
+    geom = "point", 
+    stat = "identity", 
+    position = "identity",
+    mapping = aes(color=Country)
+    ) +
+  ggplot2::geom_smooth( 
+    method = "lm", se = FALSE 
+    ) +
+  
+  ggplot2::scale_x_continuous(name = "Gewerkschaftsdichte (in %)") +
+    ggplot2::scale_y_continuous(name = "Ausgaben für R&D (in % des BIP)") +
+  ggplot2::scale_color_discrete(name="Land") + 
+  ggplot2::labs(title = "Gewerkschaften & Innovation 1990-2019") + # 
+  ggplot2::coord_cartesian() + 
+  ggplot2::facet_null()  
+
+scatterplot_tm1_c
+```
+
+# Simulierte Regression
+
+Wir führen eine Regression mit einem simulierten Datensatz durch, indem wir Zufallswerte aus einer Normalverteilung ziehen.
+```{r}
+set.seed(123)
+true_DGP <- function(x, b0, b1){
+  y <- b0 + b1*x + rnorm(length(x), 0, 5)
+  return(y)
+}
+beta_0_wahr <- 3
+beta_1_wahr <- 2
+sample_size <- 500
+x <- runif(sample_size, 0, 10)
+```
+
+```{r results="hide"}
+set.seed(123)
+n_datensaetze <- 1
+beta_0_estimates <- rep(NA, n_datensaetze)
+beta_1_estimates <- rep(NA, n_datensaetze)
+
+for (i in 1:n_datensaetze){
+  daten_satz <- data.frame(
+    x = x,
+    y = true_DGP(x, beta_0_wahr, beta_1_wahr)
+  )
+  schaetzung_2 <- lm(y~x, data = daten_satz)
+  beta_0_estimates[i] <- schaetzung_2[["coefficients"]][1]
+  beta_1_estimates[i] <- schaetzung_2[["coefficients"]][2]
+}
+
+daten_satz
+```
+
+```{r}
+Simulation2 <- lm(y ~ x, daten_satz)
+summary(Simulation2)
+```
+
+## Scatterplot
+
+```{r}
+scatterplot_Simulation2 <- ggplot2::ggplot(
+  data = Simulation2,
+  mapping = aes( 
+    x=x, 
+    y=y) 
+  ) +
+  ggplot2::layer( 
+    geom = "point", 
+    stat = "identity",
+    position = "identity" 
+    ) +
+  ggplot2::geom_smooth( 
+    method = "lm", se=FALSE) +
+  ggplot2::scale_x_continuous(name = "Simulierte Variable x") +
+  ggplot2::scale_y_continuous(name = "Simulierte Variable y") + 
+  ggplot2::labs(title = "Scatterplot einer simulierten Regression") +  
+  ggplot2::coord_cartesian() + 
+  ggplot2::facet_null() 
+
+scatterplot_Simulation2
+```
+
+## Residuen
+
+```{r}
+residsS2 <- as.data.table(Simulation2[["residuals"]])
+
+Simulation2_Residuen <- ggplot2::ggplot(
+  data = residsS2,  
+  mapping = aes( 
+   x=1:500,
+    y=V1)) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+ ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Beobachtungen") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Simulation2_Residuen
+```
+
+## Tukey Anscombe Plot
+
+```{r}
+TAdataSimulation2 <- data.table("resids"=Simulation2[["residuals"]], "fittedvalues"=predict(Simulation2))
+
+Simulation2_TA <- ggplot2::ggplot(
+  data = TAdataSimulation2,
+  mapping = aes(
+   x=fittedvalues,
+    y=resids) 
+  ) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+   ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Geschätzte Werte (Prognose)") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Simulation2_TA
+```
+
+# Erweiterte Regression mit mehreren erklärenden Variablen
+
+```{r}
+techmodel2 <- lm(Tech ~ UnionDensity+GDPpc+TAX, data=oecd_data)
+summary(techmodel2)
+```
+## Residuenplot
+
+```{r}
+resids2 <- as.data.table(techmodel2[["residuals"]])
+
+Techm2_Residuen <- ggplot2::ggplot(
+  data = resids2,  
+  mapping = aes( 
+   x=1:257,
+    y=V1)) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+ ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Beobachtungen") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Techm2_Residuen
+```
+
+## Tukey Anscombe Plot
+
+```{r}
+TAdata2 <- data.table("resids"=techmodel2[["residuals"]], "fittedvalues"=predict(techmodel2))
+
+Techm2_TA <- ggplot2::ggplot(
+  data = TAdata2,
+  mapping = aes(
+   x=fittedvalues,
+    y=resids) 
+  ) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+   ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Geschätzte Werte (Prognose)") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Techm2_TA
+```
+
+# Erweiterte Regression mit Dummy-Variablen
+
+```{r}
+techmodel3 <- lm(Tech ~ UnionDensity+GDPpc+TAX+LME, data=oecd_data)
+summary(techmodel3)
+```
+
+# Erweiterung mit funktionaler Form
+
+```{r}
+techmodel4 <- lm(Tech ~UnionDensity+I(UnionDensity^2)+GDPpc+TAX, data=oecd_data)
+summary(techmodel4)
+```
+
+# Erweiterung mit Logarithmus
+```{r}
+techmodel5 <- lm(Tech ~UnionDensity+log(GDPpc)+TAX, data=oecd_data)
+summary(techmodel5)
+```
+
+
+
+# Finale Regression mit Interaktionstermen
+
+```{r}
+techmodel6 <- lm(Tech ~ UnionDensity+GDPpc+TAX+UnionDensity*GDPpc, data=oecd_data)
+summary(techmodel6)
+```
+
+## Residuen
+
+```{r}
+resids6 <- as.data.table(techmodel6[["residuals"]])
+
+
+Techm6_Residuen <- ggplot2::ggplot(
+  data = resids6,  
+  mapping = aes( 
+   x=1:257,
+    y=V1)) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+ ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Beobachtungen") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Techm6_Residuen
+```
+
+## Tukey Anscombe Plot
+
+```{r}
+TAdata6 <- data.table("resids"=techmodel6[["residuals"]], "fittedvalues"=predict(techmodel6))
+
+Techm6_TA <- ggplot2::ggplot(
+  data = TAdata6,
+  mapping = aes(
+   x=fittedvalues,
+    y=resids) 
+  ) +
+  ggplot2::layer(
+    geom = "point",
+    stat = "identity",
+    position = "identity") +
+   ggplot2::geom_abline(color='navy',
+                  intercept = 0, 
+                  slope = 0)+
+  ggplot2::scale_x_continuous(name = "Geschätzte Werte (Prognose)") +
+  ggplot2::scale_y_continuous(name = "Residuen (Abweichungen von Prognose)")
+
+Techm6_TA
+```
+
+
+
+
+
+
+
+
+
