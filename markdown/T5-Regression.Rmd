@@ -156,7 +156,7 @@ scatterplot_tm1_c
 
 # Simulierte Regression
 
-Wir führen eine Regression mit einem simulierten Datensatz durch, indem wir Zufallswerte aus einer Normalverteilung ziehen.
+Wir führen eine Regression mit einem simulierten Datensatz durch. Dazu ziehen wir Zufallswerte, die normalverteilt um die echte Regressionsgerade herum liegen.
 ```{r}
 set.seed(123)
 true_DGP <- function(x, b0, b1){
